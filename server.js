@@ -130,8 +130,16 @@ app.get('/api/shipments', authMiddleware, async (req, res) => {
 app.post('/api/shipments', authMiddleware, async (req, res) => {
   const body = req.body || {};
   const now = new Date().toISOString();
+  let tn = (body.trackingNumber || '').trim();
+  if(tn){
+    const exists = await shipments.findOne({ trackingNumber: new RegExp('^' + tn.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') });
+    if(exists) return res.status(409).json({ error: 'tracking_conflict' });
+  } else {
+    tn = trackingNumber();
+  }
+  const initialEvent = { id: nanoid(), time: now, status: 'Created', location: body.origin || '', destination: body.destination || '', note: 'Shipment created' };
   const doc = await shipments.insert({
-    trackingNumber: trackingNumber(),
+    trackingNumber: tn,
     customer: body.customer,
     email: body.email || '',
     origin: body.origin,
@@ -141,7 +149,7 @@ app.post('/api/shipments', authMiddleware, async (req, res) => {
     status: body.status || 'Created',
     createdAt: now,
     updatedAt: now,
-    events: body.events && Array.isArray(body.events) ? body.events : [ { id: nanoid(), time: now, status: 'Created', location: body.origin || '', note: 'Shipment created' } ],
+    events: body.events && Array.isArray(body.events) ? body.events : [ initialEvent ],
   });
   res.status(201).json(doc);
 });
@@ -170,6 +178,7 @@ app.post('/api/shipments/:id/events', authMiddleware, async (req, res) => {
     time: body.time || new Date().toISOString(),
     status: body.status || 'In Transit',
     location: body.location || '',
+    destination: body.destination || '',
     note: body.note || ''
   };
   const s = await shipments.findOne({ _id: id });
