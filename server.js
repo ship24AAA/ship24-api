@@ -60,11 +60,14 @@ function trackingNumber(){
 
 // Auth
 app.post('/api/auth/register', async (req, res) => {
-  const { email, password } = req.body || {};
+  const { email, password, setupKey } = req.body || {};
   if(!email || !password) return res.status(400).json({ error:'missing_fields' });
   const existingCount = await users.count({});
   if(existingCount > 0){
-    return res.status(403).json({ error: 'registration_closed' });
+    const REQUIRED = (process.env.ADMIN_SETUP_KEY || '').trim();
+    if(!REQUIRED || setupKey !== REQUIRED){
+      return res.status(403).json({ error: 'registration_closed' });
+    }
   }
   const hash = await bcrypt.hash(password, 10);
   const user = await users.insert({ email: email.toLowerCase(), password: hash, role:'admin', createdAt: new Date().toISOString() });
